@@ -3,14 +3,14 @@ import time
 import requests
 from playwright.sync_api import sync_playwright
 
-# Installazione automatica dipendenze su Railway
+# Installazione dipendenze su Railway
 os.system("playwright install-deps chromium")
 os.system("playwright install chromium")
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-# SOGLIA RITARDI (Impostata a 1 per il test; metti 8 a test superato)
+# SOGLIA RITARDI (Metti 1 per test immediato, imposta a 8 a test superato)
 SOGLIA_CHANCE = 1
 
 def send_telegram(message):
@@ -50,7 +50,7 @@ def analizza_ritardi(numeri):
         send_telegram(f"📈 ALLARME PASSE 19-36 ({SOGLIA_CHANCE} di fila!)\nUltimi: {ultimi}")
 
 def run_bot():
-    send_telegram("🚀 Bot avviato! Controllo estrazioni in corso...")
+    send_telegram("🚀 Bot avviato! Connessione alla roulette in corso...")
     
     while True:
         try:
@@ -64,22 +64,36 @@ def run_bot():
                         "--disable-blink-features=AutomationControlled"
                     ]
                 )
+                
                 context = browser.new_context(
-                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                    viewport={"width": 1366, "height": 768}
                 )
+                
                 page = context.new_page()
+                
+                # Maschera l'automazione a Cloudflare (Stealth Mode)
+                page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
 
-                # 'commit' fa proseguire subito senza blocchi di timeout
+                url = "https://tracksino.com/mega-fire-blaze-roulette"
+                
                 try:
-                    page.goto("https://tracksino.com/mega-fire-blaze-roulette", wait_until="commit", timeout=15000)
+                    page.goto(url, wait_until="domcontentloaded", timeout=30000)
                 except Exception:
                     pass
 
-                time.sleep(12)  # Tempo per far caricare i numeri live via JavaScript
+                time.sleep(10)
+                
+                titolo = page.title()
+                if "Just a moment" in titolo or "Cloudflare" in titolo:
+                    send_telegram("⚠️ Protezione Cloudflare attiva, attendo sblocco...")
+                    time.sleep(15)
+
+                conferma_inviata = False
 
                 while True:
                     try:
-                        elementi = page.query_selector_all("span, div, td")
+                        elementi = page.query_selector_all("span, div, td, p")
                         estrazioni = []
                         for el in elementi:
                             try:
@@ -90,6 +104,10 @@ def run_bot():
                                 pass
 
                         if estrazioni:
+                            if not conferma_inviata:
+                                send_telegram(f"✅ Connessione riuscita! Primi 10 numeri estratti: {estrazioni[:10]}")
+                                conferma_inviata = True
+                                
                             analizza_ritardi(estrazioni)
 
                         time.sleep(10)
