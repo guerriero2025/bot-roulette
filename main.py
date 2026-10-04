@@ -2,7 +2,7 @@ import os
 import time
 import requests
 
-# Installazione dipendenze e Chromium
+# Installazione dipendenze e Chromium su Railway
 os.system("playwright install-deps chromium")
 os.system("playwright install chromium")
 
@@ -11,6 +11,7 @@ from playwright.sync_api import sync_playwright
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
+# SOGLIA RITARDI PER ALLARME (Impostata a 1 per il test iniziale)
 SOGLIA_CHANCE = 1
 
 def send_telegram(message):
@@ -48,7 +49,7 @@ def analizza_ritardi(numeri):
         send_telegram(f"📈 ALLARME PASSE 19-36 ({SOGLIA_CHANCE} di fila!)\nUltimi: {ultimi}")
 
 def run_bot():
-    send_telegram("🚀 Bot avviato. Test diagnostico in corso...")
+    send_telegram("🚀 Bot riavviato. Caricamento live tracker in corso...")
     
     while True:
         try:
@@ -63,50 +64,54 @@ def run_bot():
                     ]
                 )
                 context = browser.new_context(
-                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-                    viewport={"width": 1280, "height": 720}
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                    viewport={"width": 1366, "height": 768}
                 )
                 page = context.new_page()
                 
+                # Caricamento domcontentloaded immediato per evitare il blocco su WebSocket
                 url = "https://tracksino.com/mega-fire-blaze-roulette"
                 
                 try:
-                    page.goto(url, timeout=60000, wait_until="networkidle")
-                    titolo_pagina = page.title()
-                    send_telegram(f"🌐 Pagina caricata: '{titolo_pagina}'")
+                    page.goto(url, timeout=60000, wait_until="domcontentloaded")
+                    time.sleep(10)  # Attesa caricamento elementi JS e WebSocket
+                    titolo = page.title()
+                    send_telegram(f"🌐 Pagina caricata con successo: '{titolo}'")
                 except Exception as e:
-                    send_telegram(f"❌ Errore caricamento pagina: {e}")
+                    send_telegram(f"❌ Errore caricamento: {e}")
 
                 while True:
                     try:
-                        elementi = page.query_selector_all("span, div, td")
+                        # Estrazione selettori numerici specifici di Tracksino
+                        elementi = page.query_selector_all(".history-number, .number, [class*='History'], [class*='Result']")
                         
                         estrazioni = []
                         for el in elementi:
                             try:
                                 txt = el.inner_text().strip()
-                                if txt.isdigit() and 0 <= int(txt) <= 36 and len(txt) <= 2:
+                                if txt.isdigit() and 0 <= int(txt) <= 36:
                                     estrazioni.append(int(txt))
                             except:
                                 pass
 
                         if estrazioni:
-                            # Prende i primi 10 numeri trovati
-                            numeri_rilevati = estrazioni[:10]
-                            send_telegram(f"🎯 Numeri estratti live: {numeri_rilevati}")
-                            analizza_ritardi(numeri_rilevati)
-                            time.sleep(15)
+                            numeri_unici = []
+                            for num in estrazioni:
+                                numbers_unici = numeri_unici.append(num) if num not in numeri_unici else None
+                            
+                            send_telegram(f"🎯 Dati intercettati! Ultimi numeri: {estrazioni[:8]}")
+                            analizza_ritardi(estrazioni)
+                            time.sleep(10)
                         else:
-                            send_telegram("⚠️ Nessun numero letto nella struttura. In attesa di aggiornamento...")
-                            time.sleep(20)
+                            time.sleep(10)
 
                     except Exception as e:
-                        print(f"Errore lettura: {e}")
-                        time.sleep(10)
+                        print(f"Errore ciclo lettura: {e}")
+                        time.sleep(5)
 
         except Exception as e:
-            print(f"Errore browser: {e}")
-            time.sleep(15)
+            print(f"Errore istanza browser: {e}")
+            time.sleep(10)
 
 if __name__ == "__main__":
     run_bot()
