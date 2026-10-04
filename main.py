@@ -1,17 +1,13 @@
 import os
 import time
+import json
 import requests
-
-# Installazione automatica delle librerie necessarie (senza Chromium)
-os.system("pip install curl-cffi beautifulsoup4")
-
-from bs4 import BeautifulSoup
-from curl_cffi import requests as crequests
+import websocket
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-# SOGLIA RITARDI (1 per il test immediato, imposta a 8 a test superato)
+# SOGLIA RITARDI (1 per test rapido, impostare a 8 a test superato)
 SOGLIA_CHANCE = 1
 
 def send_telegram(message):
@@ -50,42 +46,58 @@ def analizza_ritardi(numeri):
     elif all(19 <= n <= 36 for n in ultimi):
         send_telegram(f"📈 ALLARME PASSE 19-36 ({SOGLIA_CHANCE} di fila!)\nUltimi: {ultimi}")
 
-def run_bot():
-    send_telegram("🚀 Bot avviato! Connessione diretta con impronta Chrome reale...")
-    
-    url = "https://tracksino.com/mega-fire-blaze-roulette"
-    conferma_inviata = False
+conferma_inviata = False
 
+def on_message(ws, message):
+    global conferma_inviata
+    try:
+        # Decodifica dei pacchetti dati dal socket
+        if "spinHistory" in message or "result" in message or "number" in message:
+            # Estrazione numeri interi dal messaggio JSON/Socket
+            import re
+            numeri_trovati = [int(n) for n in re.findall(r'\b\d+\b', message) if 0 <= int(n) <= 36]
+            
+            if numeri_trovati:
+                if not conferma_inviata:
+                    send_telegram(f"⚡ WEBSOCKET AGGANCIATO! Ricevuti numeri live: {numeri_trovati[:8]}")
+                    conferma_inviata = True
+                
+                analizza_ritardi(numeri_trovati)
+    except Exception as e:
+        print(f"Errore parsing WS: {e}")
+
+def on_open(ws):
+    send_telegram("📡 Connessione WebSocket stabilita. In ascolto dei pacchetti dati live...")
+
+def on_error(ws, error):
+    print(f"Errore WS: {error}")
+
+def on_close(ws, close_status_code, close_msg):
+    print("WebSocket chiuso, riconnessione in corso...")
+    time.sleep(5)
+
+def run_bot():
+    send_telegram("🚀 Avvio connessione diretta WebSocket al feed della roulette...")
+    
+    # Assicuriamo la presenza della libreria websocket-client
+    os.system("pip install websocket-client")
+    
+    ws_url = "wss://tracksino.com/socket.io/?EIO=4&transport=websocket"
+    
     while True:
         try:
-            # impersonate="chrome120" supera i blocchi di Cloudflare senza aprire browser
-            res = crequests.get(url, impersonate="chrome120", timeout=15)
-            
-            if res.status_code == 200:
-                soup = BeautifulSoup(res.text, "html.parser")
-                
-                # Estrazione pulita dei testi numerici dall'HTML
-                testi = soup.get_text(separator=" ").split()
-                estrazioni = []
-                for t in testi:
-                    if t.isdigit():
-                        val = int(t)
-                        if 0 <= val <= 36:
-                            estrazioni.append(val)
-
-                if estrazioni:
-                    if not conferma_inviata:
-                        send_telegram(f"✅ Connessione riuscita! Primi numeri intercettati: {estrazioni[:8]}")
-                        conferma_inviata = True
-                    
-                    analizza_ritardi(estrazioni)
-            else:
-                print(f"Risposta HTTP: {res.status_code}")
-
+            ws = websocket.WebSocketApp(
+                ws_url,
+                on_open=on_open,
+                on_message=on_message,
+                on_error=on_error,
+                on_close=on_close,
+                header={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36"}
+            )
+            ws.run_forever()
         except Exception as e:
-            print(f"Errore connessione: {e}")
-
-        time.sleep(10)
+            print(f"Errore connessione WS: {e}")
+            time.sleep(5)
 
 if __name__ == "__main__":
     run_bot()
