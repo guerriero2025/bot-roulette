@@ -2,7 +2,8 @@ import os
 import time
 import requests
 
-# Forza l'installazione del browser Chromium su Railway all'avvio
+# 1. Installazione automatica di Chromium e delle dipendenze di sistema Linux su Railway
+os.system("playwright install-deps chromium")
 os.system("playwright install chromium")
 
 from playwright.sync_api import sync_playwright
@@ -54,24 +55,33 @@ def analizza_ritardi(numeri):
 def run_bot():
     send_telegram(f"🚀 Bot Roulette attivo! Monitoraggio impostato a quota {SOGLIA_CHANCE} ritardi.")
     
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
-        
-        url = "https://www.bet365.it"
+    while True:
         try:
-            page.goto(url, timeout=60000)
-        except Exception as e:
-            print(f"Errore caricamento pagina: {e}")
+            with sync_playwright() as p:
+                # Flag per l'esecuzione corretta nei container Docker/Railway
+                browser = p.chromium.launch(
+                    headless=True,
+                    args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+                )
+                page = browser.new_page()
+                
+                url = "https://www.bet365.it"
+                try:
+                    page.goto(url, timeout=60000)
+                except Exception as e:
+                    print(f"Errore caricamento pagina: {e}")
 
-        ultimi_numeri = []
-        while True:
-            try:
-                analizza_ritardi(ultimi_numeri)
-                time.sleep(8)
-            except Exception as e:
-                print(f"Errore durante il ciclo: {e}")
-                time.sleep(3)
+                ultimi_numeri = []
+                while True:
+                    try:
+                        analizza_ritardi(ultimi_numeri)
+                        time.sleep(8)
+                    except Exception as e:
+                        print(f"Errore durante il ciclo: {e}")
+                        time.sleep(3)
+        except Exception as e:
+            print(f"Errore istanza browser, riavvio in corso: {e}")
+            time.sleep(10)
 
 if __name__ == "__main__":
     run_bot()
