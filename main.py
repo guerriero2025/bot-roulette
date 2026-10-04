@@ -1,6 +1,10 @@
 import os
 import time
 import requests
+
+# Forza l'installazione del browser Chromium su Railway all'avvio
+os.system("playwright install chromium")
+
 from playwright.sync_api import sync_playwright
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -54,7 +58,6 @@ def run_bot():
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
         
-        # URL del tavolo da monitorare
         url = "https://www.bet365.it"
         try:
             page.goto(url, timeout=60000)
@@ -64,7 +67,6 @@ def run_bot():
         ultimi_numeri = []
         while True:
             try:
-                # Il bot esegue il controllo ad ogni estrazione
                 analizza_ritardi(ultimi_numeri)
                 time.sleep(8)
             except Exception as e:
