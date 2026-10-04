@@ -2,7 +2,7 @@ import os
 import time
 import requests
 
-# 1. Installazione automatica di Chromium e delle dipendenze di sistema Linux su Railway
+# Installazione dipendenze di sistema e Chromium
 os.system("playwright install-deps chromium")
 os.system("playwright install chromium")
 
@@ -11,7 +11,7 @@ from playwright.sync_api import sync_playwright
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-# SOGLIA RITARDI PER ALLARME (8 colpi di fila)
+# SOGLIA RITARDI PER ALLARME (Impostata a 1 per il test)
 SOGLIA_CHANCE = 1
 
 def send_telegram(message):
@@ -58,29 +58,41 @@ def run_bot():
     while True:
         try:
             with sync_playwright() as p:
-                # Flag per l'esecuzione corretta nei container Docker/Railway
                 browser = p.chromium.launch(
                     headless=True,
                     args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
                 )
                 page = browser.new_page()
-                
                 url = "https://www.bet365.it"
+                
                 try:
                     page.goto(url, timeout=60000)
                 except Exception as e:
                     print(f"Errore caricamento pagina: {e}")
 
                 ultimi_numeri = []
+                
                 while True:
                     try:
+                        # Estrazione selettore numeri live dalla pagina
+                        elementi = page.query_selector_all(".roulette-number-history, .result-number, .last-numbers")
+                        
+                        estrazioni = []
+                        for el in elementi:
+                            txt = el.inner_text().strip()
+                            if txt.isdigit():
+                                estrazioni.append(int(txt))
+
+                        if estrazioni:
+                            ultimi_numeri = estrazioni
+                        
                         analizza_ritardi(ultimi_numeri)
                         time.sleep(8)
                     except Exception as e:
                         print(f"Errore durante il ciclo: {e}")
                         time.sleep(3)
         except Exception as e:
-            print(f"Errore istanza browser, riavvio in corso: {e}")
+            print(f"Errore browser: {e}")
             time.sleep(10)
 
 if __name__ == "__main__":
