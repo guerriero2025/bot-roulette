@@ -52,12 +52,11 @@ def analizza_ritardi(numeri):
         send_telegram(f"📈 ALLARME PASSE 19-36 ({SOGLIA_CHANCE} di fila!)\nUltimi: {ultimi}")
 
 def run_bot():
-    send_telegram(f"🚀 Bot Roulette attivo! Test soglia a {SOGLIA_CHANCE}.")
+    send_telegram(f"🚀 Bot Roulette attivo! Monitoraggio via CasinoScores (Soglia test: {SOGLIA_CHANCE}).")
     
     while True:
         try:
             with sync_playwright() as p:
-                # Browser configurato per evitare la rilevazione automatica
                 browser = p.chromium.launch(
                     headless=True,
                     args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
@@ -67,19 +66,18 @@ def run_bot():
                 )
                 page = context.new_page()
                 
-                url = "https://www.bet365.it"
+                # URL del tracker pubblico con i dati live di Mega Fire Blaze Roulette
+                url = "https://www.casinoscores.com/mega-fire-blaze-roulette/"
                 try:
                     page.goto(url, timeout=60000, wait_until="domcontentloaded")
                     time.sleep(5)
                 except Exception as e:
                     print(f"Errore caricamento pagina: {e}")
 
-                tentativi_vuoti = 0
-
                 while True:
                     try:
-                        # Ricerca numeri in vari possibili contenitori HTML
-                        elementi = page.query_selector_all(".roulette-number-history, .result-number, .last-numbers, div[class*='number']")
+                        # Lettura numeri estratti dalla tabella live
+                        elementi = page.query_selector_all("[class*='history'] div, [class*='result'] div, .game-history div")
                         
                         estrazioni = []
                         for el in elementi:
@@ -89,12 +87,6 @@ def run_bot():
 
                         if estrazioni:
                             analizza_ritardi(estrazioni)
-                            tentativi_vuoti = 0
-                        else:
-                            tentativi_vuoti += 1
-                            # Se dopo 5 controlli (40 sec) non legge numeri, avvisa su Telegram
-                            if tentativi_vuoti == 5:
-                                send_telegram("⚠️ Attenzione: Il bot è connesso ma la pagina non mostra elementi con numeri live. Verifica il selettore del tavolo.")
 
                         time.sleep(8)
                     except Exception as e:
