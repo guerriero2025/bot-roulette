@@ -2,7 +2,7 @@ import os
 import time
 import requests
 
-# Installazione dipendenze di sistema e Chromium
+# Installazione dipendenze e Chromium su Railway
 os.system("playwright install-deps chromium")
 os.system("playwright install chromium")
 
@@ -24,7 +24,6 @@ def send_telegram(message):
     except Exception as e:
         print(f"Errore invio Telegram: {e}")
 
-# Tabelle delle Chance Semplici
 ROSSI = {1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36}
 NERI = {2, 4, 6, 8, 10, 11, 13, 15, 17, 20, 22, 24, 26, 28, 29, 31, 33, 35}
 
@@ -53,44 +52,54 @@ def analizza_ritardi(numeri):
         send_telegram(f"📈 ALLARME PASSE 19-36 ({SOGLIA_CHANCE} di fila!)\nUltimi: {ultimi}")
 
 def run_bot():
-    send_telegram(f"🚀 Bot Roulette attivo! Monitoraggio impostato a quota {SOGLIA_CHANCE} ritardi.")
+    send_telegram(f"🚀 Bot Roulette attivo! Test soglia a {SOGLIA_CHANCE}.")
     
     while True:
         try:
             with sync_playwright() as p:
+                # Browser configurato per evitare la rilevazione automatica
                 browser = p.chromium.launch(
                     headless=True,
                     args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
                 )
-                page = browser.new_page()
-                url = "https://www.bet365.it"
+                context = browser.new_context(
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                )
+                page = context.new_page()
                 
+                url = "https://www.bet365.it"
                 try:
-                    page.goto(url, timeout=60000)
+                    page.goto(url, timeout=60000, wait_until="domcontentloaded")
+                    time.sleep(5)
                 except Exception as e:
                     print(f"Errore caricamento pagina: {e}")
 
-                ultimi_numeri = []
-                
+                tentativi_vuoti = 0
+
                 while True:
                     try:
-                        # Estrazione selettore numeri live dalla pagina
-                        elementi = page.query_selector_all(".roulette-number-history, .result-number, .last-numbers")
+                        # Ricerca numeri in vari possibili contenitori HTML
+                        elementi = page.query_selector_all(".roulette-number-history, .result-number, .last-numbers, div[class*='number']")
                         
                         estrazioni = []
                         for el in elementi:
                             txt = el.inner_text().strip()
-                            if txt.isdigit():
+                            if txt.isdigit() and 0 <= int(txt) <= 36:
                                 estrazioni.append(int(txt))
 
                         if estrazioni:
-                            ultimi_numeri = estrazioni
-                        
-                        analizza_ritardi(ultimi_numeri)
+                            analizza_ritardi(estrazioni)
+                            tentativi_vuoti = 0
+                        else:
+                            tentativi_vuoti += 1
+                            # Se dopo 5 controlli (40 sec) non legge numeri, avvisa su Telegram
+                            if tentativi_vuoti == 5:
+                                send_telegram("⚠️ Attenzione: Il bot è connesso ma la pagina non mostra elementi con numeri live. Verifica il selettore del tavolo.")
+
                         time.sleep(8)
                     except Exception as e:
-                        print(f"Errore durante il ciclo: {e}")
-                        time.sleep(3)
+                        print(f"Errore ciclo lettura: {e}")
+                        time.sleep(5)
         except Exception as e:
             print(f"Errore browser: {e}")
             time.sleep(10)
