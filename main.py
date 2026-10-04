@@ -10,7 +10,7 @@ os.system("playwright install chromium")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-# SOGLIA RITARDI (Metti 1 per test immediato, imposta a 8 a test superato)
+# SOGLIA RITARDI (1 per test rapido, impostare a 8 dopo la conferma)
 SOGLIA_CHANCE = 1
 
 def send_telegram(message):
@@ -50,7 +50,7 @@ def analizza_ritardi(numeri):
         send_telegram(f"📈 ALLARME PASSE 19-36 ({SOGLIA_CHANCE} di fila!)\nUltimi: {ultimi}")
 
 def run_bot():
-    send_telegram("🚀 Bot avviato! Connessione alla roulette in corso...")
+    send_telegram("🚀 Bot avviato! Connessione al tracker in corso...")
     
     while True:
         try:
@@ -71,24 +71,18 @@ def run_bot():
                 )
                 
                 page = context.new_page()
-                
-                # Maschera l'automazione a Cloudflare (Stealth Mode)
                 page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
 
                 url = "https://tracksino.com/mega-fire-blaze-roulette"
                 
                 try:
-                    page.goto(url, wait_until="domcontentloaded", timeout=30000)
-                except Exception:
-                    pass
+                    page.goto(url, wait_until="commit", timeout=20000)
+                except Exception as e:
+                    print(f"Goto timeout/error: {e}")
 
-                time.sleep(10)
+                time.sleep(12)
                 
-                titolo = page.title()
-                if "Just a moment" in titolo or "Cloudflare" in titolo:
-                    send_telegram("⚠️ Protezione Cloudflare attiva, attendo sblocco...")
-                    time.sleep(15)
-
+                tentativi_falliti = 0
                 conferma_inviata = False
 
                 while True:
@@ -105,10 +99,17 @@ def run_bot():
 
                         if estrazioni:
                             if not conferma_inviata:
-                                send_telegram(f"✅ Connessione riuscita! Primi 10 numeri estratti: {estrazioni[:10]}")
+                                send_telegram(f"✅ Dati agganciati! Numeri rilevati: {estrazioni[:8]}")
                                 conferma_inviata = True
-                                
+                            
                             analizza_ritardi(estrazioni)
+                            tentativi_falliti = 0
+                        else:
+                            tentativi_falliti += 1
+                            if tentativi_falliti == 3:
+                                tit = page.title()
+                                send_telegram(f"⚠️ Impossibile leggere i numeri. Titolo pagina: '{tit}'. Riavvio connessione...")
+                                break  # Esci dal ciclo per forzare il riavvio del browser
 
                         time.sleep(10)
                     except Exception as e:
