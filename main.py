@@ -1,16 +1,17 @@
 import os
 import time
 import requests
-from playwright.sync_api import sync_playwright
 
-# Installazione dipendenze su Railway
-os.system("playwright install-deps chromium")
-os.system("playwright install chromium")
+# Installazione automatica delle librerie necessarie (senza Chromium)
+os.system("pip install curl-cffi beautifulsoup4")
+
+from bs4 import BeautifulSoup
+from curl_cffi import requests as crequests
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-# SOGLIA RITARDI (1 per test rapido, impostare a 8 dopo la conferma)
+# SOGLIA RITARDI (1 per il test immediato, imposta a 8 a test superato)
 SOGLIA_CHANCE = 1
 
 def send_telegram(message):
@@ -50,75 +51,41 @@ def analizza_ritardi(numeri):
         send_telegram(f"📈 ALLARME PASSE 19-36 ({SOGLIA_CHANCE} di fila!)\nUltimi: {ultimi}")
 
 def run_bot():
-    send_telegram("🚀 Bot avviato! Connessione al tracker in corso...")
+    send_telegram("🚀 Bot avviato! Connessione diretta con impronta Chrome reale...")
     
+    url = "https://tracksino.com/mega-fire-blaze-roulette"
+    conferma_inviata = False
+
     while True:
         try:
-            with sync_playwright() as p:
-                browser = p.chromium.launch(
-                    headless=True,
-                    args=[
-                        "--no-sandbox",
-                        "--disable-setuid-sandbox",
-                        "--disable-dev-shm-usage",
-                        "--disable-blink-features=AutomationControlled"
-                    ]
-                )
+            # impersonate="chrome120" supera i blocchi di Cloudflare senza aprire browser
+            res = crequests.get(url, impersonate="chrome120", timeout=15)
+            
+            if res.status_code == 200:
+                soup = BeautifulSoup(res.text, "html.parser")
                 
-                context = browser.new_context(
-                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-                    viewport={"width": 1366, "height": 768}
-                )
-                
-                page = context.new_page()
-                page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+                # Estrazione pulita dei testi numerici dall'HTML
+                testi = soup.get_text(separator=" ").split()
+                estrazioni = []
+                for t in testi:
+                    if t.isdigit():
+                        val = int(t)
+                        if 0 <= val <= 36:
+                            estrazioni.append(val)
 
-                url = "https://tracksino.com/mega-fire-blaze-roulette"
-                
-                try:
-                    page.goto(url, wait_until="commit", timeout=20000)
-                except Exception as e:
-                    print(f"Goto timeout/error: {e}")
-
-                time.sleep(12)
-                
-                tentativi_falliti = 0
-                conferma_inviata = False
-
-                while True:
-                    try:
-                        elementi = page.query_selector_all("span, div, td, p")
-                        estrazioni = []
-                        for el in elementi:
-                            try:
-                                txt = el.inner_text().strip()
-                                if txt.isdigit() and 0 <= int(txt) <= 36 and len(txt) <= 2:
-                                    estrazioni.append(int(txt))
-                            except Exception:
-                                pass
-
-                        if estrazioni:
-                            if not conferma_inviata:
-                                send_telegram(f"✅ Dati agganciati! Numeri rilevati: {estrazioni[:8]}")
-                                conferma_inviata = True
-                            
-                            analizza_ritardi(estrazioni)
-                            tentativi_falliti = 0
-                        else:
-                            tentativi_falliti += 1
-                            if tentativi_falliti == 3:
-                                tit = page.title()
-                                send_telegram(f"⚠️ Impossibile leggere i numeri. Titolo pagina: '{tit}'. Riavvio connessione...")
-                                break  # Esci dal ciclo per forzare il riavvio del browser
-
-                        time.sleep(10)
-                    except Exception as e:
-                        print(f"Errore lettura: {e}")
-                        time.sleep(5)
+                if estrazioni:
+                    if not conferma_inviata:
+                        send_telegram(f"✅ Connessione riuscita! Primi numeri intercettati: {estrazioni[:8]}")
+                        conferma_inviata = True
+                    
+                    analizza_ritardi(estrazioni)
+            else:
+                print(f"Risposta HTTP: {res.status_code}")
 
         except Exception as e:
-            print(f"Riavvio browser: {e}")
-            time.sleep(10)
+            print(f"Errore connessione: {e}")
+
+        time.sleep(10)
 
 if __name__ == "__main__":
     run_bot()
