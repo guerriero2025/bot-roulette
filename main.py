@@ -12,7 +12,7 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
 # SOGLIA RITARDI PER ALLARME (8 colpi di fila)
-SOGLIA_CHANCE = 8
+SOGLIA_CHANCE = 1
 
 def send_telegram(message):
     if not TELEGRAM_TOKEN or not CHAT_ID:
